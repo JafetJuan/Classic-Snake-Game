@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿using System.Collections.Generic;
+using UnityEngine;
 
 public class GameManager : MonoBehaviour
 {
@@ -7,20 +8,25 @@ public class GameManager : MonoBehaviour
 
     public Color color1;
     public Color color2;
+    public Color foodColor = Color.red;
     public Color playerColor = Color.black;
 
     public Transform cameraHolder;
 
     private GameObject playerObj;
+    private GameObject foodObj;
     private Node playerNode;
+    private Node foodNode;
 
     private GameObject mapObject;
     private SpriteRenderer mapRederer;
 
     private Node[,] grid;
+    private List<Node> availableNodes = new List<Node>();
 
     private bool up, down, left, right;
-    private bool movePlayer;
+    private float timer;
+    public float moveRate = 0.5f;
     
     private Direction curDirection;
     
@@ -35,6 +41,8 @@ public class GameManager : MonoBehaviour
         CreateMap();
         PlacePlayer();
         PlaceCamera();
+        CreateFood();
+        curDirection = Direction.right;
     }
 
     //Method that create the hole world for our snake
@@ -71,6 +79,7 @@ public class GameManager : MonoBehaviour
 
                 // Assign the new created node to de grid
                 grid[x, y] = node;
+                availableNodes.Add(node);
 
                 #region Draw pixels
 
@@ -131,6 +140,15 @@ public class GameManager : MonoBehaviour
         position += Vector3.one * .5f;
         cameraHolder.position = position;
     }
+
+    private void CreateFood()
+    {
+        foodObj = new GameObject("Food");
+        SpriteRenderer foodRenderer = foodObj.AddComponent<SpriteRenderer>();
+        foodRenderer.sprite = CreateSprite(foodColor);
+        foodRenderer.sortingOrder = 1;
+        RandomlyPlaceFood();
+    }
     #endregion
 
     #region Update
@@ -138,7 +156,12 @@ public class GameManager : MonoBehaviour
     {
         GetInput();
         SetPlayerDirection();
-        MovePlayer();
+        timer += Time.deltaTime;
+        if (timer > moveRate)
+        {
+            timer = 0f;
+            MovePlayer();
+        }
     }
     
     private void GetInput()
@@ -154,34 +177,23 @@ public class GameManager : MonoBehaviour
         if (up)
         {
             curDirection = Direction.up;
-            movePlayer = true;
         }
         else if (down)
         {
             curDirection = Direction.down;
-            movePlayer = true;
         }
         else if (left)
         {
             curDirection = Direction.left;
-            movePlayer = true;
         }
         else if(right)
         {
             curDirection = Direction.right;
-            movePlayer = true;
         }
     }
 
     private void MovePlayer()
-    {
-        if (!movePlayer)
-        {
-            return;
-        }
-
-        movePlayer = false;
-        
+    { 
         int x = 0;
         int y = 0;
         
@@ -208,13 +220,38 @@ public class GameManager : MonoBehaviour
         }
         else
         {
+            bool isScore = targetNode == foodNode;
+
+            availableNodes.Remove(playerNode);
             playerObj.transform.position = targetNode.worldPosition;
             playerNode = targetNode;
+            availableNodes.Add(playerNode);
+
+            //Tail logic here
+            
+            if (isScore)
+            {
+                if (availableNodes.Count > 0)
+                {
+                    RandomlyPlaceFood();
+                }
+                else
+                {
+                    //Winner winner, apple dinner!
+                }
+            }
         }
     }
     #endregion
     
     #region Utils
+    private void RandomlyPlaceFood()
+    {
+        int randomNodeNumber = Random.Range(0, availableNodes.Count);
+        Node node = availableNodes[randomNodeNumber];
+        foodObj.transform.position = node.worldPosition;
+        foodNode = node;
+    }
     // Returns a node from the requested position on the grid
     private Node GetNode(int x, int y)
     {
