@@ -1,5 +1,7 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using UnityEngine;
+using Random = UnityEngine.Random;
 
 public class GameManager : MonoBehaviour
 {
@@ -15,20 +17,25 @@ public class GameManager : MonoBehaviour
 
     private GameObject playerObj;
     private GameObject foodObj;
+    private GameObject tailParent;
     private Node playerNode;
+    private Node previousPlayerNode;
     private Node foodNode;
+    private Sprite playerSprite;
 
     private GameObject mapObject;
     private SpriteRenderer mapRederer;
 
     private Node[,] grid;
     private List<Node> availableNodes = new List<Node>();
+    private List<SpecialNode> tail = new List<SpecialNode>();
 
     private bool up, down, left, right;
     private float timer;
     public float moveRate = 0.5f;
     
-    private Direction curDirection;
+    private Direction targetDirection;
+    private Direction currentDirection;
     
     public enum Direction
     {
@@ -42,7 +49,7 @@ public class GameManager : MonoBehaviour
         PlacePlayer();
         PlaceCamera();
         CreateFood();
-        curDirection = Direction.right;
+        targetDirection = Direction.right;
     }
 
     //Method that create the hole world for our snake
@@ -127,10 +134,15 @@ public class GameManager : MonoBehaviour
     {
         playerObj = new GameObject("playerColor");
         SpriteRenderer playerRenderer = playerObj.AddComponent<SpriteRenderer>();
-        playerRenderer.sprite = CreateSprite(playerColor);
+        playerSprite = CreateSprite(playerColor);
+        playerRenderer.sprite = playerSprite;
         playerRenderer.sortingOrder = 1;
         playerNode = GetNode(3, 3);
-        playerObj.transform.position = playerNode.worldPosition;
+        
+        PlacePlayerObject(playerObj, playerNode.worldPosition);
+        playerObj.transform.localScale = Vector3.one * 1.2f;
+        
+        tailParent = new GameObject("tailParent");
     }
 
     private void PlaceCamera()
@@ -159,7 +171,8 @@ public class GameManager : MonoBehaviour
         timer += Time.deltaTime;
         if (timer > moveRate)
         {
-            timer = 0f;
+            timer = 0;
+            currentDirection = targetDirection;
             MovePlayer();
         }
     }
@@ -176,28 +189,36 @@ public class GameManager : MonoBehaviour
     {
         if (up)
         {
-            curDirection = Direction.up;
+            SetDirection(Direction.up);
         }
         else if (down)
         {
-            curDirection = Direction.down;
+            SetDirection(Direction.down);
         }
         else if (left)
         {
-            curDirection = Direction.left;
+            SetDirection(Direction.left);
         }
         else if(right)
         {
-            curDirection = Direction.right;
+            SetDirection(Direction.right);
         }
     }
 
+    private void SetDirection(Direction dir)
+    {
+        if (!isOpposite(dir))
+        {
+            targetDirection = dir;
+        }   
+    }
+    
     private void MovePlayer()
     { 
         int x = 0;
         int y = 0;
         
-        switch (curDirection)
+        switch (currentDirection)
         {
             case Direction.up:
                 y = 1;
@@ -220,38 +241,130 @@ public class GameManager : MonoBehaviour
         }
         else
         {
-            bool isScore = targetNode == foodNode;
-
-            availableNodes.Remove(playerNode);
-            playerObj.transform.position = targetNode.worldPosition;
-            playerNode = targetNode;
-            availableNodes.Add(playerNode);
-
-            //Tail logic here
-            
-            if (isScore)
+            if (isTailNode(targetNode))
             {
-                if (availableNodes.Count > 0)
+                //Game Over
+            }
+            else
+            {
+
+                bool isScore = targetNode == foodNode;
+
+                Node previousNode = playerNode;
+                availableNodes.Add(previousNode);
+
+                if (isScore)
                 {
-                    RandomlyPlaceFood();
+                    tail.Add(CreateTailNode(previousNode.x, previousNode.y));
+                    availableNodes.Remove(previousNode);
                 }
-                else
+
+                MoveTail();
+
+                PlacePlayerObject(playerObj, targetNode.worldPosition);
+                playerNode = targetNode;
+                availableNodes.Remove(playerNode);
+
+                if (isScore)
                 {
-                    //Winner winner, apple dinner!
+                    if (availableNodes.Count > 0)
+                    {
+                        RandomlyPlaceFood();
+                    }
+                    else
+                    {
+                        //Winner winner, apple dinner!
+                    }
                 }
             }
         }
     }
+
+    private void MoveTail()
+    {
+        Node prevNode = null;
+
+        for (int i = 0; i < tail.Count; i++)
+        {
+            SpecialNode spNode = tail[i];
+            availableNodes.Add(spNode.node);
+
+            if (i == 0)
+            {
+                prevNode = spNode.node;
+                spNode.node = playerNode;
+            }
+            else
+            {
+                Node prev = spNode.node;
+                spNode.node = prevNode;
+                prevNode = prev;
+            }
+
+            availableNodes.Remove(spNode.node);
+            PlacePlayerObject(spNode.obj, spNode.node.worldPosition);
+        }
+        
+    }
     #endregion
     
     #region Utils
+
+    private bool isOpposite(Direction dir)
+    {
+        switch (dir)
+        {
+            default:
+            case Direction.up:
+                if (currentDirection == Direction.down)
+                    return true;
+                else
+                    return false;
+            case Direction.down:
+                if (currentDirection == Direction.up)
+                    return true;
+                else
+                    return false;
+            case Direction.left:
+                if (currentDirection == Direction.right)
+                    return true;
+                else
+                    return false;
+            case Direction.right:
+                if (currentDirection == Direction.left)
+                    return true;
+                else
+                    return false;
+        }
+    }
+
+    private bool isTailNode(Node targetNode)
+    {
+        for (int i = 0; i < tail.Count; i++)
+        {
+            if (tail[i].node == targetNode)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    
+    private void PlacePlayerObject(GameObject obj, Vector3 pos)
+    {
+        pos += Vector3.one * .5f;
+        obj.transform.position = pos;
+    }
+    
     private void RandomlyPlaceFood()
     {
         int randomNodeNumber = Random.Range(0, availableNodes.Count);
         Node node = availableNodes[randomNodeNumber];
-        foodObj.transform.position = node.worldPosition;
+        PlacePlayerObject(foodObj, node.worldPosition);
         foodNode = node;
     }
+    
     // Returns a node from the requested position on the grid
     private Node GetNode(int x, int y)
     {
@@ -259,6 +372,21 @@ public class GameManager : MonoBehaviour
             return null;
 
         return grid[x, y];
+    }
+
+    SpecialNode CreateTailNode(int x, int y)
+    {
+        SpecialNode spNode = new SpecialNode();
+        spNode.node = GetNode(x, y);
+        spNode.obj = new GameObject();
+        spNode.obj.transform.parent = tailParent.transform;
+        spNode.obj.transform.position = spNode.node.worldPosition;
+        spNode.obj.transform.localScale = Vector3.one * .95f;
+        SpriteRenderer renderer = spNode.obj.AddComponent<SpriteRenderer>();
+        renderer.sprite = playerSprite;
+        renderer.sortingOrder = 1;
+
+        return spNode;
     }
 
     //Creates a color sprite and return it
@@ -270,7 +398,7 @@ public class GameManager : MonoBehaviour
         texture.Apply();
         texture.filterMode = FilterMode.Point;
         Rect rect = new Rect(0, 0, 1, 1);
-        return Sprite.Create(texture, rect, Vector2.zero, 1, 0, SpriteMeshType.FullRect);
+        return Sprite.Create(texture, rect, Vector2.one*.5f, 1, 0, SpriteMeshType.FullRect);
     }
     #endregion
 }
