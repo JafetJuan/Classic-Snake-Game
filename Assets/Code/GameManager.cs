@@ -1,7 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices.WindowsRuntime;
+using System.Security.Cryptography;
 using UnityEngine;
+using UnityEngine.Events;
+using UnityEngine.Serialization;
 using Random = UnityEngine.Random;
+using UnityEngine.UI;
 
 public class GameManager : MonoBehaviour
 {
@@ -30,26 +35,76 @@ public class GameManager : MonoBehaviour
     private List<Node> availableNodes = new List<Node>();
     private List<SpecialNode> tail = new List<SpecialNode>();
 
+    public bool isGameOver;
+    public bool isFirstInput;
     private bool up, down, left, right;
     private float timer;
     public float moveRate = 0.5f;
     
     private Direction targetDirection;
     private Direction currentDirection;
-    
+
+    private int currentScore;
+    private int highScore;
+    public Text currentScoreText;
+    public Text highScoreText;
+
     public enum Direction
     {
         up,down,left,right
     }
+
+    public UnityEvent onStart;
+    public UnityEvent onGameOver;
+    public UnityEvent firstInput;
+    public UnityEvent onScore;
     
     #region Init
     private void Start()
     {
+        onStart.Invoke();
+    }
+
+    public void StartNewGame()
+    {
+        ClearReferences();
         CreateMap();
         PlacePlayer();
         PlaceCamera();
         CreateFood();
+        UpdateScore();
         targetDirection = Direction.right;
+        isGameOver = false;
+        currentScore = 0;
+    }
+
+    public void ClearReferences()
+    {
+        if (null != mapObject)
+        {
+            Destroy(mapObject);                
+        }
+
+        if (null != playerObj)
+        {
+            Destroy(playerObj);
+        }
+
+        if (null != foodObj)
+        {
+            Destroy(foodObj);
+        }
+
+        foreach (var tailObj in tail)
+        {
+            if (null != tailObj)
+            {
+                Destroy(tailObj.obj);
+            }
+        }
+        tail.Clear();
+        availableNodes.Clear();
+        grid = null;
     }
 
     //Method that create the hole world for our snake
@@ -166,14 +221,35 @@ public class GameManager : MonoBehaviour
     #region Update
     private void Update()
     {
-        GetInput();
-        SetPlayerDirection();
-        timer += Time.deltaTime;
-        if (timer > moveRate)
+        if (isGameOver)
         {
-            timer = 0;
-            currentDirection = targetDirection;
-            MovePlayer();
+            if (Input.GetKeyDown(KeyCode.R))
+            {
+                onStart.Invoke();
+            }
+            return;
+        }
+        
+        GetInput();
+
+        if (isFirstInput)
+        {
+            SetPlayerDirection();
+            timer += Time.deltaTime;
+            if (timer > moveRate)
+            {
+                timer = 0;
+                currentDirection = targetDirection;
+                MovePlayer();
+            }
+        }
+        else
+        {
+            if (up || down || left || right)
+            {
+                isFirstInput = true;
+                firstInput.Invoke();
+            }
         }
     }
     
@@ -238,12 +314,14 @@ public class GameManager : MonoBehaviour
         if (targetNode == null)
         {
             //Game Over
+            onGameOver.Invoke();
         }
         else
         {
             if (isTailNode(targetNode))
             {
                 //Game Over
+                onGameOver.Invoke();
             }
             else
             {
@@ -267,6 +345,13 @@ public class GameManager : MonoBehaviour
 
                 if (isScore)
                 {
+                    currentScore++;
+                    if (currentScore >= highScore)
+                    {
+                        highScore = currentScore;
+                    }
+                    onScore.Invoke();
+                        
                     if (availableNodes.Count > 0)
                     {
                         RandomlyPlaceFood();
@@ -310,6 +395,12 @@ public class GameManager : MonoBehaviour
     
     #region Utils
 
+    public void GameOver()
+    {
+        isGameOver = true;
+        isFirstInput = false;
+    }
+    
     private bool isOpposite(Direction dir)
     {
         switch (dir)
@@ -336,6 +427,12 @@ public class GameManager : MonoBehaviour
                 else
                     return false;
         }
+    }
+
+    public void UpdateScore()
+    {
+        currentScoreText.text = currentScore.ToString();
+        highScoreText.text = highScore.ToString();
     }
 
     private bool isTailNode(Node targetNode)
